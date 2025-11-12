@@ -244,4 +244,5 @@ pip install -r requirements.txt
 Metric	Screenshot
 Daily Calls by Source	📊 Bar chart of bookings per campaign
 Cost Per Booking	💰 Channel-wise CPB table
+
 Channel Leaderboard	🏆 Sorted by bookings & spend
