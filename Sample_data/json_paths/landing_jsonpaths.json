@@ -1,0 +1,7 @@
+{
+  "jsonpaths": [
+    "$.event",
+    "$.payload.email",
+    "$.payload.name"
+  ]
+}

@@ -1,0 +1,5 @@
+streamlit==1.40.0
+psycopg2-binary==2.9.9
+pandas==2.2.3
+boto3==1.35.15
+awswrangler==3.10.0

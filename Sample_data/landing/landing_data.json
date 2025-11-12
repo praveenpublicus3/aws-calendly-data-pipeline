@@ -1,0 +1,7 @@
+{
+  "event": "invitee.created",
+  "payload": {
+    "email": "john.doe@example.com",
+    "name": "John Doe"
+  }
+}
