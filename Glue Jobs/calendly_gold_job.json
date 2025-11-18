@@ -39,5 +39,89 @@
 	"dag": {},
 	"hasBeenSaved": false,
 	"usageProfileName": null,
-	"script": "import sys\r\nfrom awsglue.transforms import *\r\nfrom awsglue.utils import getResolvedOptions\r\nfrom awsglue.context import GlueContext\r\nfrom awsglue.job import Job\r\nfrom pyspark.context import SparkContext\r\nfrom pyspark.sql import functions as F\r\n\r\nargs = getResolvedOptions(sys.argv, ['JOB_NAME'])\r\nsc = SparkContext()\r\nglueContext = GlueContext(sc)\r\nspark = glueContext.spark_session\r\njob = Job(glueContext)\r\njob.init(args['JOB_NAME'], args)\r\n\r\n# --------------------------------------------\r\n# 1️⃣  Calendly Summary  (Existing Logic)\r\n# --------------------------------------------\r\nsilver_path = \"s3://marketing-calendly-project/silver/calendly/\"\r\nsilver_df = glueContext.create_dynamic_frame.from_options(\r\n    connection_type=\"s3\",\r\n    connection_options={\"paths\": [silver_path]},\r\n    format=\"parquet\"\r\n)\r\ndf = silver_df.toDF()\r\n\r\ndf_summary = df.groupBy(\"invitee_email\", \"event\").agg(\r\n    F.count(\"*\").alias(\"total_invites\")\r\n)\r\n\r\ngold_summary_path = \"s3://marketing-calendly-project/gold/calendly_summary/\"\r\ndf_summary.write.mode(\"overwrite\").parquet(gold_summary_path)\r\n\r\n# --------------------------------------------\r\n# 2️⃣  Spend Table (Flatten Array)\r\n# --------------------------------------------\r\ntry:\r\n    spend_path = \"s3://marketing-calendly-project/silver/spend/\"\r\n    spend_df = glueContext.create_dynamic_frame.from_options(\r\n        connection_type=\"s3\",\r\n        connection_options={\"paths\": [spend_path]},\r\n        format=\"parquet\"\r\n    ).toDF()\r\n\r\n    # Some files have one column \"array\" -> flatten it if exists\r\n    if \"array\" in spend_df.columns:\r\n        spend_flat = spend_df.selectExpr(\"inline(array)\")\r\n    else:\r\n        spend_flat = spend_df\r\n\r\n    # Write flattened spend data to Gold\r\n    gold_spend_path = \"s3://marketing-calendly-project/gold/spend/\"\r\n    spend_flat.write.mode(\"overwrite\").parquet(gold_spend_path)\r\n\r\n    print(\"✅ Spend data flattened and written to Gold zone successfully\")\r\n\r\nexcept Exception as e:\r\n    print(f\"⚠️ Spend data step skipped or failed: {e}\")\r\n\r\n# --------------------------------------------\r\n# 3️⃣  Landing Table (If Available)\r\n# --------------------------------------------\r\ntry:\r\n    landing_path = \"s3://marketing-calendly-project/silver/landing/\"\r\n    landing_df = glueContext.create_dynamic_frame.from_options(\r\n        connection_type=\"s3\",\r\n        connection_options={\"paths\": [landing_path]},\r\n        format=\"parquet\"\r\n    ).toDF()\r\n\r\n    # Optional cleanup or renaming if needed\r\n    # Example: ensure column names are consistent\r\n    landing_df_clean = landing_df.toDF(*[c.lower().strip() for c in landing_df.columns])\r\n\r\n    gold_landing_path = \"s3://marketing-calendly-project/gold/landing/\"\r\n    landing_df_clean.write.mode(\"overwrite\").parquet(gold_landing_path)\r\n\r\n    print(\"✅ Landing data written to Gold zone successfully\")\r\n\r\nexcept Exception as e:\r\n    print(f\"⚠️ Landing data step skipped or failed: {e}\")\r\n\r\n# --------------------------------------------\r\n# Finalize\r\n# --------------------------------------------\r\njob.commit()\r\n"
-}
+	"script": "import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.context import SparkContext
+from pyspark.sql import functions as F
+
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+# --------------------------------------------
+# 1️⃣  Calendly Summary  (Existing Logic)
+# --------------------------------------------
+silver_path = "s3://marketing-calendly-project/silver/calendly/"
+silver_df = glueContext.create_dynamic_frame.from_options(
+    connection_type="s3",
+    connection_options={"paths": [silver_path]},
+    format="parquet"
+)
+df = silver_df.toDF()
+
+df_summary = df.groupBy("invitee_email", "event").agg(
+    F.count("*").alias("total_invites")
+)
+
+gold_summary_path = "s3://marketing-calendly-project/gold/calendly_summary/"
+df_summary.write.mode("overwrite").parquet(gold_summary_path)
+
+# --------------------------------------------
+# 2️⃣  Spend Table (Flatten Array)
+# --------------------------------------------
+try:
+    spend_path = "s3://marketing-calendly-project/silver/spend/"
+    spend_df = glueContext.create_dynamic_frame.from_options(
+        connection_type="s3",
+        connection_options={"paths": [spend_path]},
+        format="parquet"
+    ).toDF()
+
+    # Some files have one column "array" -> flatten it if exists
+    if "array" in spend_df.columns:
+        spend_flat = spend_df.selectExpr("inline(array)")
+    else:
+        spend_flat = spend_df
+
+    # Write flattened spend data to Gold
+    gold_spend_path = "s3://marketing-calendly-project/gold/spend/"
+    spend_flat.write.mode("overwrite").parquet(gold_spend_path)
+
+    print("✅ Spend data flattened and written to Gold zone successfully")
+
+except Exception as e:
+    print(f"⚠️ Spend data step skipped or failed: {e}")
+
+# --------------------------------------------
+# 3️⃣  Landing Table (If Available)
+# --------------------------------------------
+try:
+    landing_path = "s3://marketing-calendly-project/silver/landing/"
+    landing_df = glueContext.create_dynamic_frame.from_options(
+        connection_type="s3",
+        connection_options={"paths": [landing_path]},
+        format="parquet"
+    ).toDF()
+
+    # Optional cleanup or renaming if needed
+    # Example: ensure column names are consistent
+    landing_df_clean = landing_df.toDF(*[c.lower().strip() for c in landing_df.columns])
+
+    gold_landing_path = "s3://marketing-calendly-project/gold/landing/"
+    landing_df_clean.write.mode("overwrite").parquet(gold_landing_path)
+
+    print("✅ Landing data written to Gold zone successfully")
+
+except Exception as e:
+    print(f"⚠️ Landing data step skipped or failed: {e}")
+
+# --------------------------------------------
+# Finalize
+# --------------------------------------------
+job.commit()"
