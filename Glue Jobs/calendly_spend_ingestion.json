@@ -38,5 +38,45 @@
 	},
 	"hasBeenSaved": false,
 	"usageProfileName": null,
-	"script": "import boto3\r\nimport requests\r\nimport json\r\nfrom datetime import date, timedelta\r\n\r\ns3 = boto3.client('s3')\r\nbucket = \"marketing-calendly-project\"\r\nprefix = \"spend/\"\r\n\r\n# Yesterday’s date (Day-1)\r\ntoday = date.today()\r\nfile_date = (today - timedelta(days=1)).strftime(\"%Y-%m-%d\")\r\n\r\n# Public JSON file URL\r\nurl = f\"https://dea-data-bucket.s3.us-east-1.amazonaws.com/calendly_spend_data/spend_data_{file_date}.json\"\r\nresponse = requests.get(url)\r\ndata = response.json()\r\n\r\n# Upload file to your S3 bucket\r\ns3.put_object(\r\n    Bucket=bucket,\r\n    Key=f\"{prefix}spend_data_{file_date}.json\",\r\n    Body=json.dumps(data)\r\n)\r\n\r\nprint(\"✅ Spend data file successfully copied to S3.\")\r\n"
+	"script": "import sys
+from awsglue.utils import getResolvedOptions
+from awsglue.context import GlueContext
+from pyspark.context import SparkContext
+from awsglue.job import Job
+from pyspark.sql import functions as F
+
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+# 1️⃣ Read raw spend data from S3
+input_path = "s3://marketing-calendly-project/spend/"
+df = spark.read.option("multiline", "true").json(input_path)
+
+# 2️⃣ Flatten array<struct> if needed
+if "array" in df.columns:
+    flat_df = df.select(F.explode("array").alias("item")).select(
+        F.col("item.date").alias("date"),
+        F.col("item.channel").alias("channel"),
+        F.col("item.spend").alias("spend")
+    )
+else:
+    flat_df = df.select("date", "channel", "spend")
+
+# 3️⃣ Clean data and cast types
+flat_df = flat_df.withColumn("date", F.to_date("date")) \
+                 .withColumn("channel", F.col("channel").cast("string")) \
+                 .withColumn("spend", F.col("spend").cast("double")) \
+                 .na.drop(subset=["channel", "spend"])
+
+# 4️⃣ Write flattened data to Gold zone
+output_path = "s3://marketing-calendly-project/gold/spend_flattened/"
+flat_df.write.mode("overwrite").parquet(output_path)
+
+print("✅ Spend data successfully flattened and written to Gold zone.")
+
+job.commit()"
 }
