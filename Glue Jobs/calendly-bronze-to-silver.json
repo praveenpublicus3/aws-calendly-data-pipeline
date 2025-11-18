@@ -39,5 +39,55 @@
 	"dag": {},
 	"hasBeenSaved": false,
 	"usageProfileName": null,
-	"script": "import sys\r\nfrom awsglue.transforms import *\r\nfrom awsglue.utils import getResolvedOptions\r\nfrom awsglue.context import GlueContext\r\nfrom awsglue.job import Job\r\nfrom pyspark.context import SparkContext\r\nfrom pyspark.sql import functions as F\r\n\r\n# ----------------------------\r\n# Job Setup\r\n# ----------------------------\r\nargs = getResolvedOptions(sys.argv, ['JOB_NAME'])\r\nsc = SparkContext()\r\nglueContext = GlueContext(sc)\r\nspark = glueContext.spark_session\r\njob = Job(glueContext)\r\njob.init(args['JOB_NAME'], args)\r\n\r\n# ----------------------------\r\n# Step 1️⃣: Read Bronze Data\r\n# ----------------------------\r\nbronze_path = \"s3://marketing-calendly-project/bronze/calendly/\"\r\nbronze_df = glueContext.create_dynamic_frame.from_options(\r\n    connection_type=\"s3\",\r\n    connection_options={\"paths\": [bronze_path]},\r\n    format=\"json\"\r\n).toDF()\r\n\r\nprint(\"✅ Bronze schema:\")\r\nbronze_df.printSchema()\r\n\r\n# ----------------------------\r\n# Step 2️⃣: Rename Columns (if needed)\r\n# ----------------------------\r\n# If your columns already are invitee_email/invitee_name — we just pass them through\r\ndf_silver = bronze_df.select(\r\n    F.col(\"event\"),\r\n    F.col(\"invitee_email\"),\r\n    F.col(\"invitee_name\")\r\n)\r\n\r\n# ----------------------------\r\n# Step 3️⃣: Write to Silver Zone\r\n# ----------------------------\r\nsilver_path = \"s3://marketing-calendly-project/silver/calendly/\"\r\ndf_silver.write.mode(\"overwrite\").parquet(silver_path)\r\n\r\nprint(f\"✅ Silver layer successfully written to {silver_path}\")\r\n\r\njob.commit()\r\n"
+	"script": import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.context import SparkContext
+from pyspark.sql import functions as F
+
+# ----------------------------
+# Job Setup
+# ----------------------------
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+# ----------------------------
+# Step 1️⃣: Read Bronze Data
+# ----------------------------
+bronze_path = "s3://marketing-calendly-project/bronze/calendly/"
+bronze_df = glueContext.create_dynamic_frame.from_options(
+    connection_type="s3",
+    connection_options={"paths": [bronze_path]},
+    format="json"
+).toDF()
+
+print("✅ Bronze schema:")
+bronze_df.printSchema()
+
+# ----------------------------
+# Step 2️⃣: Rename Columns (if needed)
+# ----------------------------
+# If your columns already are invitee_email/invitee_name — we just pass them through
+df_silver = bronze_df.select(
+    F.col("event"),
+    F.col("invitee_email"),
+    F.col("invitee_name")
+)
+
+# ----------------------------
+# Step 3️⃣: Write to Silver Zone
+# ----------------------------
+silver_path = "s3://marketing-calendly-project/silver/calendly/"
+df_silver.write.mode("overwrite").parquet(silver_path)
+
+print(f"✅ Silver layer successfully written to {silver_path}")
+
+job.commit()
+
 }
